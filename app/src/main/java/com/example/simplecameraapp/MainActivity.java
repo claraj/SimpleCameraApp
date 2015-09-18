@@ -17,6 +17,7 @@ import android.widget.ImageView;
 import android.widget.Toast;
 
 import java.io.File;
+import java.util.UUID;
 
 
 public class MainActivity extends ActionBarActivity {
@@ -26,25 +27,26 @@ public class MainActivity extends ActionBarActivity {
 
 	private static final int TAKE_PICTURE_REQUEST = 0;
 
+	private static final String LATEST_PICTURE_FILENAME = "picture filename";
+	private static final String PICTURE_TO_DISPLAY = "picture has been taken";
 
-	final String filename = "temp_photo.jpg";
+	final String filenameBase = "temp_photo.jpg";
+	String filename;
 	Uri imageFileUri;
 
-	private static final String PICTURE_TO_DISPLAY = "picture has been taken";
 	boolean pictureToDisplay = false;
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
+		setContentView(R.layout.activity_main);
 
 		if (savedInstanceState != null) {
 			pictureToDisplay = savedInstanceState.getBoolean(PICTURE_TO_DISPLAY, false);
+			filename = savedInstanceState.getString(LATEST_PICTURE_FILENAME, null);
 		}
 
-		setContentView(R.layout.activity_main);
-
 		cameraPicture = (ImageView) findViewById(R.id.camera_picture);
-
 		takePictureButton = (Button) findViewById(R.id.take_picture_button);
 
 		takePictureButton.setOnClickListener(new View.OnClickListener() {
@@ -53,7 +55,8 @@ public class MainActivity extends ActionBarActivity {
 
 				Intent pictureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
 
-				//Specify a filename, and convert to a Uri.
+				//Specify a filename, and convert to a Uri. Add a UUID to the filename to ensure name is unique.
+				filename = UUID.randomUUID().toString() + "_" + filenameBase;
 				File file = new File(Environment.getExternalStorageDirectory(), filename);
 				imageFileUri = Uri.fromFile(file);
 
@@ -77,78 +80,75 @@ public class MainActivity extends ActionBarActivity {
 		if (resultCode == RESULT_OK && requestCode == TAKE_PICTURE_REQUEST) {
 			pictureToDisplay = true;
 
+			//Request new picture is added to device's media store
 			Intent mediaScanIntent = new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE);
 			File file = new File(Environment.getExternalStorageDirectory(), filename);
 			imageFileUri = Uri.fromFile(file);
 			mediaScanIntent.setData(imageFileUri);
 			sendBroadcast(mediaScanIntent);
-
-		} else {
-			pictureToDisplay = false;
 		}
 
 	}
 
 
+	/** Called when the UI has been set up after onActivityResult */
 	@Override
 	public void onWindowFocusChanged(boolean hasFocus) {
 		super.onWindowFocusChanged(hasFocus);
 
 		if (hasFocus && pictureToDisplay) {
+
 			Bitmap image = scaleBitmap();
 			cameraPicture.setImageBitmap(image);
 		}
 	}
 
+
 	@Override
 	public void onSaveInstanceState(Bundle outBundle){
 		outBundle.putBoolean(PICTURE_TO_DISPLAY, pictureToDisplay);
+		outBundle.putString(LATEST_PICTURE_FILENAME, filename);
 	}
 
 
-	Bitmap scaleBitmap () {
+	protected Bitmap scaleBitmap () {
 
-			// * Scale picture taken to fit into the ImageView */
+		// * Scale picture taken to fit into the ImageView */
 
-			//Step 1: what size is the ImageView?
-			int imageViewHeight = cameraPicture.getHeight();
-			int imageViewWidth = cameraPicture.getWidth();
+		//Step 1: what size is the ImageView?
+		int imageViewHeight = cameraPicture.getHeight();
+		int imageViewWidth = cameraPicture.getWidth();
 
-			//Step 2: decode file to find out how large the image is.
-			//BitmapFactory is used to create bitmaps from pixels in a file.
-			// Many options and settings, so use a BitmapFactory.Options object to store our desired settings.
-			//Set the inJustDecodeBounds flag to true,
-			//which means just the *information about* the picture is decoded and stored in bOptions
-			//Not all of the pixels have to be read and stored here.
-			//When we've done this, we can query bOptions to find out the original picture's height and width.
-			BitmapFactory.Options bOptions = new BitmapFactory.Options();
-			bOptions.inJustDecodeBounds = true;
+		//Step 2: decode file to find out how large the image is.
+		//BitmapFactory is used to create bitmaps from pixels in a file.
+		// Many options and settings, so use a BitmapFactory.Options object to store our desired settings.
+		//Set the inJustDecodeBounds flag to true,
+		//which means just the *information about* the picture is decoded and stored in bOptions
+		//Not all of the pixels have to be read and stored here.
+		//When we've done this, we can query bOptions to find out the original picture's height and width.
+		BitmapFactory.Options bOptions = new BitmapFactory.Options();
+		bOptions.inJustDecodeBounds = true;
 
-			File file = new File(Environment.getExternalStorageDirectory(), filename);
-			Uri imageFileUri = Uri.fromFile(file);
+		File file = new File(Environment.getExternalStorageDirectory(), filename);
+		imageFileUri = Uri.fromFile(file);
+		String photoFilePath = imageFileUri.getPath();
 
-			String photoFilePath = imageFileUri.getPath();
+		BitmapFactory.decodeFile(photoFilePath, bOptions);
 
-			BitmapFactory.decodeFile(photoFilePath, bOptions);
+		int pictureHeight = bOptions.outHeight;
+		int pictureWidth = bOptions.outWidth;
 
-			int pictureHeight = bOptions.outHeight;
-			int pictureWidth = bOptions.outWidth;
+		//Step 3. Can use the original size and target size to calculate scale factor
+		int scaleFactor = Math.min(pictureHeight / imageViewHeight, pictureWidth / imageViewWidth);
 
-			//Step 3. Can use the original size and target size to calculate scale factor
-			int scaleFactor = Math.min(pictureHeight / imageViewHeight, pictureWidth / imageViewWidth);
+		//Step 4. Decode the image file into a new bitmap, scaled to fit the ImageView
+		bOptions.inJustDecodeBounds = false;   //now we want to get a bitmap
+		bOptions.inSampleSize = scaleFactor;
 
-			//Step 4. Decode the image file into a new bitmap, scaled to fit the ImageView
-			bOptions.inJustDecodeBounds = false;   //now we want to get a bitmap
-			bOptions.inSampleSize = scaleFactor;
+		Bitmap bitmap = BitmapFactory.decodeFile(photoFilePath, bOptions);
+		return bitmap;
 
-			Bitmap bitmap = BitmapFactory.decodeFile(photoFilePath, bOptions);
-			return bitmap;
-
-		}
-
-
-
-	//Rest of MainActivity follows....
+	}
 
 
 	@Override
